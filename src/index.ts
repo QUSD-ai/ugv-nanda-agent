@@ -2,9 +2,11 @@
  * UGV NANDA Agent
  * 
  * Turns a Waveshare UGV robot into a NANDA-compliant A2A agent.
+ * Now with AGNTCY Identity integration for network trust.
  */
 
 import { serve } from 'bun';
+import { initializeIdentity, getIdentityDocument, type AgentIdentity } from './identity';
 
 export interface UGVConfig {
   ugvUrl: string;
@@ -133,11 +135,29 @@ const SKILLS: Skill[] = [
   },
 ];
 
-export function createUGVAgent(config: UGVConfig) {
+export async function createUGVAgent(config: UGVConfig) {
   const client = new UGVClient(config.ugvUrl);
   const name = config.agentName || 'ugv-robot';
   const port = config.agentPort || 3010;
   const description = config.description || 'Waveshare UGV robot with camera and sensors';
+
+  // Initialize AGNTCY Identity (DID + optional badge)
+  let identity: AgentIdentity | null = null;
+  try {
+    identity = await initializeIdentity({
+      agentName: name,
+      agentUrl: `http://localhost:${port}`,
+      organization: 'QUSD',
+      capabilities: ['mobility', 'vision', 'sensing'],
+      oauth: process.env.OAUTH_CLIENT_ID ? {
+        clientId: process.env.OAUTH_CLIENT_ID,
+        clientSecret: process.env.OAUTH_CLIENT_SECRET || '',
+        issuerUrl: process.env.OAUTH_ISSUER_URL || '',
+      } : undefined,
+    });
+  } catch (err) {
+    console.log('⚠ Identity init failed, continuing without DID');
+  }
 
   // Agent card for discovery
   const agentCard: AgentCard = {
@@ -203,6 +223,14 @@ export function createUGVAgent(config: UGVConfig) {
         return Response.json(agentCard, { headers });
       }
 
+      // Identity document (DID + badge)
+      if (url.pathname === '/.well-known/did.json' || url.pathname === '/.well-known/agent-identity.json') {
+        if (identity) {
+          return Response.json(getIdentityDocument(identity, agentCard), { headers });
+        }
+        return Response.json({ error: 'Identity not initialized' }, { status: 503, headers });
+      }
+
       // A2A JSON-RPC endpoint
       if (url.pathname === '/a2a' && req.method === 'POST') {
         try {
@@ -256,12 +284,19 @@ export function createUGVAgent(config: UGVConfig) {
    Name:    ${name}
    UGV:     ${config.ugvUrl}
    A2A:     http://localhost:${port}
+   ${identity ? `DID:     ${identity.did}` : ''}
    
-   Discovery: http://localhost:${port}/.well-known/agent.json
-   Skills:    ${SKILLS.map(s => s.name).join(', ')}
+   Endpoints:
+   - /.well-known/agent.json      Agent Card (A2A discovery)
+   - /.well-known/did.json        DID Document (identity)
+   - /a2a                         JSON-RPC endpoint
+   - /health                      Health check
+   
+   Skills: ${SKILLS.map(s => s.name).join(', ')}
+   ${identity?.badgeId ? `\n   ✓ Badge published to AGNTCY network` : '   ⚠ No badge (set OAUTH_* env vars to publish)'}
 `);
 
-  return { server, client, agentCard, handleSkill };
+  return { server, client, agentCard, handleSkill, identity };
 }
 
 // CLI entry point
