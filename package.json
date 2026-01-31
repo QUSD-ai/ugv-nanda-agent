@@ -1,0 +1,31 @@
+{
+  "name": "@qusd/ugv-nanda-agent",
+  "version": "0.1.0",
+  "description": "Turn Waveshare UGV robots into NANDA-compliant A2A agents",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node"
+  },
+  "keywords": [
+    "nanda",
+    "a2a",
+    "robot",
+    "ugv",
+    "waveshare",
+    "jetson",
+    "agent"
+  ],
+  "author": "QUSD",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/QUSD-ai/ugv-nanda-agent"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
